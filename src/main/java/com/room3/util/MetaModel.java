@@ -50,13 +50,10 @@ public class MetaModel<T> {
 		for (Field field : fields) {
 
 			// the column reference variable will NOT be null if the field is indeed
-			// annotated with @Column
-			Column column = field.getAnnotation(Column.class);
-				
-			if (column != null) {
+			// annotated with @Colum
+			if (field.getAnnotation(Column.class) != null) {
 				// if the column is indeed marked with @Colum, instantiate a new ColumnField
 				// object with its data
-				column.columnName();
 				columnFields.add(new ColumnField(field));
 				// now that we've transposed the field to a column Field object, we can capture
 				// data like Type, columnName, etc...
@@ -76,9 +73,7 @@ public class MetaModel<T> {
 
 		for (Field field : fields) {
 
-			Id primaryKey = field.getAnnotation(Id.class);
-
-			if (primaryKey != null) { // we se the primaryKeyField of this MetaModel to the field we find 
+			if (field.getAnnotation(Id.class) != null) { // we se the primaryKeyField of this MetaModel to the field we find 
 				this.primaryKeyField = new PrimaryKeyField(field);
 				return new PrimaryKeyField(field); // if there is a PK found, we end the method here and return it
 			}
@@ -113,6 +108,9 @@ public class MetaModel<T> {
 	public String getClassName() {
 		return clazz.getName(); // reutrns  the package of where the class came from as well
 	} 
-
+	
+	public String getTableName() {
+		return clazz.getAnnotation(Entity.class).tableName();
+	}
 	
 }

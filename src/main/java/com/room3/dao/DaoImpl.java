@@ -1,5 +1,6 @@
 package com.room3.dao;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
@@ -8,6 +9,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.commons.beanutils.ConstructorUtils;
@@ -24,66 +26,45 @@ public class DaoImpl {
 
 	public <T> int insert(Object o) {
 
-		Class<?> clazz = o.getClass();
-		MetaModel<T> mta = new MetaModel(clazz);
-		// List<MetaModel<Class<?>>> meta = cfg.getMetaModels();
-		PrimaryKeyField pkFields = mta.getPrimaryKey();
+		MetaModel<Class<?>> mta = MetaModel.of(o.getClass());
 		List<ColumnField> columns = mta.getColumns();
-		// List<ForeignKey> foreignKeyFields = mta.getForeignKeys();
-		int id = 0;
+
 		try (Connection con = Configuration.getConnection()) {
 
-			StringBuilder insertCommand = new StringBuilder();
-			int totalColumns = columns.size();
-			int totalColumnsQMarks = columns.size();
-			String tableName = clazz.getSimpleName().toLowerCase();
-			insertCommand.append("insert into " + tableName);
-			insertCommand.append(" (");
-			for (ColumnField f : columns) {
-				String columnName = f.getColumnName();
+			StringBuilder insertCommand = new StringBuilder("INSERT INTO " + mta.getTableName() + " (");
 
-//				Annotation[] annotations = f.getDeclaredAnnotations();
-//	            for (Annotation annotation : annotations) {
-//	                if (annotation instanceof PKey) {
-//	                    isSerial = ((PKey) annotation).isSerial();
-//	                    // if it is serial, we don't set that number than we need one less ?
-//	                }
-//	            }
-//	            if(isSerial){
-//	                totalColumnsQMarks--;
-//	            }else {
-//				
+			for (ColumnField column : columns) {
 
-				insertCommand.append(columnName);
-				insertCommand.append(totalColumns > 1 ? ", " : ") values(?");
-
-				totalColumns--;
+				if (column == columns.get(columns.size() - 1)) {
+					insertCommand.append(column.getColumnName() + ") VALUES (");
+				} else {
+					insertCommand.append(column.getColumnName() + ", ");
+				}
 			}
 
-			for (int i = 1; i < totalColumnsQMarks; i++) {
-				insertCommand.append(",?");
+			for (int i = 1; i < columns.size(); i++) {
+				if (i == 1) {
+					insertCommand.append("?");
+				} else {
+					insertCommand.append(",?");
+				}
 			}
 			insertCommand.append(");");
+
 			String sql = insertCommand.toString();
 
-			PreparedStatement stmt = con.prepareStatement(sql, 1);
+			PreparedStatement stmt = con.prepareStatement(sql, new String[] { mta.getPrimaryKey().getColumnName() });
+
 			int index = 1;
 
 			for (ColumnField f : columns) {
-				String name = f.getName();
 
-				Field field = null;
 				try {
-					field = o.getClass().getDeclaredField(name);
-
+					Field field = o.getClass().getDeclaredField(f.getName());
 					field.setAccessible(true);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-				assert field != null;
-				String fieldType = f.getType().getSimpleName();
 
-				try {
+					String fieldType = f.getType().getSimpleName();
+
 					switch (fieldType) {
 					case "int":
 						stmt.setInt(index, (int) field.get(o));
@@ -120,43 +101,29 @@ public class DaoImpl {
 
 					}
 
-				} catch (IllegalArgumentException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (IllegalAccessException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (SQLException e) {
-					// TODO Auto-generated catch block
+				} catch (NoSuchFieldException e) {
 					e.printStackTrace();
 				}
-
 			}
-
 			int i = stmt.executeUpdate();
 
 			if (i > 0) {
-				ResultSet rs = stmt.getGeneratedKeys();
 
+				ResultSet rs = stmt.getGeneratedKeys();
 				while (rs.next()) {
+					System.out.println(rs.getInt(1));
 					return rs.getInt(1);
 				}
 
 			}
-//				System.out.println(idname);
-//				int id = rs.getInt(idname);
-//				System.out.println(id);
-			// if the insertion is successful, we return here
-
-			// if the insertion is successful, we return here
-
+		} catch (IllegalAccessException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
-		return -1;
-
+		return 0;
 	}
 
 	public <T> List<Object> findAll(Object o) throws SQLException, NoSuchMethodException, SecurityException,
@@ -236,7 +203,7 @@ public class DaoImpl {
 
 	public <T> Object selectById(Object o, int id) throws NoSuchMethodException, IllegalAccessException,
 			InvocationTargetException, InstantiationException, NoSuchFieldException, SecurityException {
-
+		Constructor<? extends Object> p = o.getClass().getConstructor();
 		Class<?> clazz = o.getClass();
 		MetaModel<T> mta = new MetaModel(clazz);
 		// List<MetaModel<Class<?>>> meta = cfg.getMetaModels();
@@ -245,15 +212,9 @@ public class DaoImpl {
 
 		try (Connection con = Configuration.getConnection()) {
 
-			StringBuilder sqlCommand = new StringBuilder();
-			sqlCommand.append("select * from ");
-			String tableName = clazz.getSimpleName().toLowerCase();
-			sqlCommand.append(tableName);
-			sqlCommand.append(" where ");
-			String idName = pkFields.getColumnName();
-			sqlCommand.append(idName);
-			sqlCommand.append(" = ");
-			sqlCommand.append(id);
+			StringBuilder sqlCommand = new StringBuilder("SELECT * FROM " + clazz.getSimpleName().toLowerCase()
+					+ " where " + pkFields.getColumnName() + " = " + id);
+
 			String sql = sqlCommand.toString();
 
 			PreparedStatement stmt = con.prepareStatement(sql);
@@ -261,7 +222,8 @@ public class DaoImpl {
 			ResultSet rs;
 			if ((rs = stmt.executeQuery()) != null) {
 				while (rs.next()) {
-					Object b = createNewInstance(clazz.getName());
+
+					Object b = p.newInstance();
 
 					String idname = pkFields.getName();
 					Field field = b.getClass().getDeclaredField(idname);
@@ -346,27 +308,16 @@ public class DaoImpl {
 		return beanInstance;
 	}
 
-	public <T> void deleteById(Object o, int id) throws NoSuchMethodException, IllegalAccessException,
-			InvocationTargetException, InstantiationException, NoSuchFieldException, SecurityException {
+	public <T> void deleteById(Object o, int id) {
 
 		Class<?> clazz = o.getClass();
-		MetaModel<T> mta = new MetaModel(clazz);
-
-		PrimaryKeyField pkFields = mta.getPrimaryKey();
-//		List<ColumnField> columns = mta.getColumns();
+		MetaModel<Class<?>> mta = MetaModel.of(clazz);
 
 		try (Connection con = Configuration.getConnection()) {
 
-			StringBuilder sqlCommand = new StringBuilder();
-			sqlCommand.append("delete from ");
-			String tableName = clazz.getSimpleName().toLowerCase();
-			sqlCommand.append(tableName);
-			sqlCommand.append(" where ");
-			String idName = pkFields.getColumnName();
-			sqlCommand.append(idName);
-			sqlCommand.append(" = ");
-			sqlCommand.append(id);
-			String sql = sqlCommand.toString();
+			String sql = "DELETE FROM " + mta.getTableName() + " WHERE " + mta.getPrimaryKey().getColumnName() + " = "
+					+ mta.getPrimaryKey();
+
 			PreparedStatement stmt = con.prepareStatement(sql);
 			stmt.execute();
 
@@ -378,8 +329,9 @@ public class DaoImpl {
 
 	public void findAllClasses(String packageName) {
 		Calculator cal = new Calculator();
-		Reflections reflections = new Reflections(packageName, new SubTypesScanner(false));
-		List<Class<?>> clazzes = reflections.getSubTypesOf(Object.class).stream().collect(Collectors.toList());
+
+		Reflections scan = new Reflections(packageName, new SubTypesScanner(false));
+		Set <Class<?>> clazzes = scan.getSubTypesOf(Object.class).stream().collect(Collectors.toSet());
 		Configuration p = new Configuration();
 
 		try (Connection conn = Configuration.getConnection()) {
@@ -387,33 +339,23 @@ public class DaoImpl {
 			p.addAnnotatedClasses(clazzes);
 
 			for (com.room3.util.MetaModel<Class<?>> metamodel : p.getMetaModels()) {
+				
+				StringBuilder sb = new StringBuilder("CREATE TABLE IF NOT EXISTS " + metamodel.getTableName() + " (");
 
-				StringBuilder sb = new StringBuilder();
-				String s = "CREATE TABLE IF NOT EXISTS " + metamodel.getSimpleClassName().toLowerCase() + " (";
-
-				sb.append(s);
-
-				PrimaryKeyField pk = metamodel.getPrimaryKey();
 				List<ColumnField> columns = metamodel.getColumns();
-				// List<ForeignKey> foreignKeyFields = null;
 
-//				try {
-//					foreignKeyFields = metamodel.getForeignKeys();
-//				} catch (RuntimeException e) {
-//					
-//				}
-
-				sb.append(pk.getColumnName() + " SERIAL PRIMARY KEY");
+				sb.append(metamodel.getPrimaryKey().getColumnName() + " SERIAL PRIMARY KEY");
 
 				for (ColumnField column : columns) {
-					String type = cal.getColType(column);
-					String here = ", " + column.getColumnName() + " " + type;
-					sb.append(here);
+
+					sb.append(", " + column.getColumnName() + " " + cal.getColType(column));
 				}
-				sb.append(")");
-				String sql = sb.toString();
-				PreparedStatement stmt = conn.prepareStatement(sql);
-				stmt.executeUpdate();
+				
+				sb.append(")");				
+			
+				PreparedStatement stmt = conn.prepareStatement(sb.toString());
+				
+				stmt.execute();
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -477,7 +419,7 @@ public class DaoImpl {
 
 	public Object updateSingle(Object o) {
 
-		MetaModel<Class> mta = new MetaModel(o.getClass());
+		MetaModel<?> mta = MetaModel.of(o.getClass());
 		PrimaryKeyField pkField = mta.getPrimaryKey();
 		List<ColumnField> columns = mta.getColumns();
 

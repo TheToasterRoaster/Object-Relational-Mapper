@@ -9,8 +9,8 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
-import com.room3.annotations.*;
 import org.apache.commons.dbcp2.BasicDataSource;
 
 // pooled connection Connection con = Configuration.getConnection();
@@ -48,7 +48,7 @@ public class Configuration {
 private List<MetaModel<Class<?>>> metaModelList; // for example, this is a placeholder for metamodels of SuperVillain, SuperPrison, Crime
 	
 	// constructor - addAnnotatedClass
-	public Configuration addAnnotatedClasses(List<Class<?>> annotatedClasses) {
+	public Configuration addAnnotatedClasses(Set<Class<?>> annotatedClasses) {
 		
 		// if the metaModelList is null, geenrate a new LinkedList
 		if(metaModelList == null) {
@@ -69,14 +69,4 @@ private List<MetaModel<Class<?>>> metaModelList; // for example, this is a place
 		// if this list is empty return emptyList(), otherwise return the list
 		return (List<MetaModel<Class<?>>>) ((metaModelList == null) ? Collections.emptyList() : metaModelList);
 	}
-	public static MetaModel<Class<?>> of(Class<?> clazz) {
-		// check that the class we're attempting to transpose is annotated with @Entity
-		if (clazz.getAnnotation(Entity.class) == null) {
-			throw new IllegalStateException("Cannot create MetaModel objkect from this class! Provided class "
-					+ clazz.getName() + " is not annotated with @Entity");
-		}
-		// if it IS annotated with @Entity, generate a MetaModel object of it.
-		return new MetaModel<Class<?>>(clazz);
-	}
-
 }
