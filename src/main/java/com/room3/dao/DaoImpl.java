@@ -31,8 +31,7 @@ public class DaoImpl {
 		List<ColumnField> columns = mta.getColumns();
 		// List<ForeignKey> foreignKeyFields = mta.getForeignKeys();
 		int id = 0;
-		try (Connection con = Configuration.getConnection()){
-			
+		try (Connection con = Configuration.getConnection()) {
 
 			StringBuilder insertCommand = new StringBuilder();
 			int totalColumns = columns.size();
@@ -244,8 +243,7 @@ public class DaoImpl {
 		PrimaryKeyField pkFields = mta.getPrimaryKey();
 		List<ColumnField> columns = mta.getColumns();
 
-		try (Connection con = Configuration.getConnection()){
-			
+		try (Connection con = Configuration.getConnection()) {
 
 			StringBuilder sqlCommand = new StringBuilder();
 			sqlCommand.append("select * from ");
@@ -351,15 +349,14 @@ public class DaoImpl {
 	public <T> void deleteById(Object o, int id) throws NoSuchMethodException, IllegalAccessException,
 			InvocationTargetException, InstantiationException, NoSuchFieldException, SecurityException {
 
-		
 		Class<?> clazz = o.getClass();
 		MetaModel<T> mta = new MetaModel(clazz);
-		
+
 		PrimaryKeyField pkFields = mta.getPrimaryKey();
 //		List<ColumnField> columns = mta.getColumns();
-	
-		try (Connection con = Configuration.getConnection()){ 
-		
+
+		try (Connection con = Configuration.getConnection()) {
+
 			StringBuilder sqlCommand = new StringBuilder();
 			sqlCommand.append("delete from ");
 			String tableName = clazz.getSimpleName().toLowerCase();
@@ -372,7 +369,7 @@ public class DaoImpl {
 			String sql = sqlCommand.toString();
 			PreparedStatement stmt = con.prepareStatement(sql);
 			stmt.execute();
-			
+
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
@@ -435,7 +432,6 @@ public class DaoImpl {
 			String sql = "SELECT * FROM " + o.getSimpleName().toLowerCase() + " WHERE " + column + " = " + "'" + value
 					+ "'";
 
-			
 			PreparedStatement stmt = con.prepareStatement(sql);
 			ResultSet rs = stmt.executeQuery();
 
