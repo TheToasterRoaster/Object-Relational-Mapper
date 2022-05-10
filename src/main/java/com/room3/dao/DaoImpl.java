@@ -125,7 +125,7 @@ public class DaoImpl {
 
 	public <T> List<Object> findAll(Class<?> clazz) {
 
-		Object b = Calculator.getNewInstance(clazz);
+		
 
 		try (Connection con = Configuration.getConnection()) {
 
@@ -141,7 +141,7 @@ public class DaoImpl {
 			ResultSet rs = stmt.executeQuery();
 
 			while (rs.next()) {
-
+				Object b = Calculator.getNewInstance(clazz);
 				for (Field field : fields) {
 
 					field.setAccessible(true);
@@ -216,9 +216,9 @@ public class DaoImpl {
 				for (Field field : b.getClass().getDeclaredFields()) {
 
 					field.setAccessible(true);
-
+					
 					if (field.getName() == pk.getName()) {
-						b.getClass().getDeclaredField(pk.getName()).setInt(b, id);
+						field.setInt(b, id);
 					} else {
 
 						for (ColumnField column : columns) {
@@ -241,9 +241,6 @@ public class DaoImpl {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IllegalAccessException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (NoSuchFieldException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (SecurityException e) {
@@ -317,7 +314,7 @@ public class DaoImpl {
 		String idname = pkField.getName();
 		List<Object> stuff = new ArrayList<Object>();
 		try (Connection con = Configuration.getConnection()) {
-			Object b = Calculator.getNewInstance(o);
+			
 			String sql = "SELECT * FROM " + o.getSimpleName().toLowerCase() + " WHERE " + column + " = " + "'" + value
 					+ "'";
 
@@ -325,7 +322,7 @@ public class DaoImpl {
 			ResultSet rs = stmt.executeQuery();
 
 			while (rs.next()) {
-
+				Object b = Calculator.getNewInstance(o);
 				Field[] fields = b.getClass().getDeclaredFields();
 
 				for (Field field : fields) {
