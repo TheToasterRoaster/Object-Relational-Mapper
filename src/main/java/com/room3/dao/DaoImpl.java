@@ -1,8 +1,6 @@
 package com.room3.dao;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,7 +10,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.apache.commons.beanutils.ConstructorUtils;
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
 
@@ -42,8 +39,8 @@ public class DaoImpl {
 				}
 			}
 
-			for (int i = 1; i < columns.size(); i++) {
-				if (i == 1) {
+			for (int i = 0; i < columns.size(); i++) {
+				if (i == 0) {
 					insertCommand.append("?");
 				} else {
 					insertCommand.append(",?");
@@ -54,7 +51,7 @@ public class DaoImpl {
 			String sql = insertCommand.toString();
 
 			PreparedStatement stmt = con.prepareStatement(sql, new String[] { mta.getPrimaryKey().getColumnName() });
-
+			System.out.println(stmt.toString());
 			int index = 1;
 
 			for (ColumnField f : columns) {
@@ -126,60 +123,49 @@ public class DaoImpl {
 		return 0;
 	}
 
-	public <T> List<Object> findAll(Object o) throws SQLException, NoSuchMethodException, SecurityException,
-			IllegalAccessException, NoSuchFieldException {
+	public <T> List<Object> findAll(Class<?> clazz) {
 
-		Class<?> clazz;
+		Object b = Calculator.getNewInstance(clazz);
 
-		Connection con = Configuration.getConnection();
-		List<Object> flubber = new ArrayList<Object>();
+		try (Connection con = Configuration.getConnection()) {
 
-		clazz = o.getClass();
-		MetaModel<T> mta = new MetaModel<T>(clazz);
-		PrimaryKeyField pkField = mta.getPrimaryKey();
-		List<ColumnField> columns = mta.getColumns();
-		Entity table = clazz.getDeclaredAnnotation(Entity.class);
-		StringBuilder far = new StringBuilder();
-		Field[] fields = clazz.getDeclaredFields();
-		far.append("SELECT * FROM " + table.tableName().toLowerCase());
-		String sql = far.toString();
+			List<Object> objects = new ArrayList<Object>();
+			MetaModel<Class<?>> mta = MetaModel.of(clazz);
+			PrimaryKeyField pkField = mta.getPrimaryKey();
+			List<ColumnField> columns = mta.getColumns();
 
-		PreparedStatement stmt = con.prepareStatement(sql);
-		ResultSet rs;
-		if ((rs = stmt.executeQuery()) != null) {
+			Field[] fields = clazz.getDeclaredFields();
+
+			PreparedStatement stmt = con.prepareStatement("SELECT * FROM " + mta.getTableName());
+
+			ResultSet rs = stmt.executeQuery();
+
 			while (rs.next()) {
-				Object b = createNewInstance(clazz.getName());
 
-				for (Field f : fields) {
-					String name = f.getName();
-					f.setAccessible(true);
-					String fieldType = null;
-					String columnName = null;
+				for (Field field : fields) {
+
+					field.setAccessible(true);
+					
 					try {
-						if (f.getName().equals(pkField.getName())) {
-
-							int sname = rs.getInt(pkField.getColumnName());
-							f.setInt(b, sname);
+						if (field.getName().equals(pkField.getName())) {
+							
+							field.setInt(b, rs.getInt(pkField.getColumnName()));
+							
 						} else {
 
-							for (ColumnField c : columns) {
+							for (ColumnField column : columns) {
 
-								if (f.getName().equals(c.getName())) {
+								if (field.getName().equals(column.getName())) {
 
-									columnName = c.getColumnName();
-
-									fieldType = c.getType().getSimpleName();
-
-									switch (fieldType) {
+									switch (field.getType().getSimpleName()) {
 
 									case "int":
-										int jname = rs.getInt(columnName);
-										f.set(b, jname);
+										int jname = rs.getInt(column.getColumnName());
+										field.set(b, jname);
 										break;
 
 									case "String":
-										String uname = rs.getString(columnName);
-										f.set(b, uname);
+										field.set(b, rs.getString(column.getColumnName()));
 										break;
 									}
 								}
@@ -190,100 +176,63 @@ public class DaoImpl {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 
-					} catch (SQLException e) {
+					} catch (IllegalAccessException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 				}
-				flubber.add(b);
+				objects.add(b);
 			}
+
+			return objects;
+		} catch (SQLException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
-		return flubber;
+		return null;
 	}
 
-	public <T> Object selectById(Object o, int id) throws NoSuchMethodException, IllegalAccessException,
-			InvocationTargetException, InstantiationException, NoSuchFieldException, SecurityException {
-		Constructor<? extends Object> p = o.getClass().getConstructor();
-		Class<?> clazz = o.getClass();
-		MetaModel<T> mta = new MetaModel(clazz);
-		// List<MetaModel<Class<?>>> meta = cfg.getMetaModels();
-		PrimaryKeyField pkFields = mta.getPrimaryKey();
+	public <T> Object selectById(Class<?> clazz, int id) {
+
+		MetaModel<Class<?>> mta = MetaModel.of(clazz);
+
+		PrimaryKeyField pk = mta.getPrimaryKey();
 		List<ColumnField> columns = mta.getColumns();
 
 		try (Connection con = Configuration.getConnection()) {
+			Object b = Calculator.getNewInstance(clazz);
 
-			StringBuilder sqlCommand = new StringBuilder("SELECT * FROM " + clazz.getSimpleName().toLowerCase()
-					+ " where " + pkFields.getColumnName() + " = " + id);
+			StringBuilder sqlCommand = new StringBuilder(
+					"SELECT * FROM " + mta.getTableName() + " WHERE " + pk.getColumnName() + " = " + id);
 
 			String sql = sqlCommand.toString();
 
 			PreparedStatement stmt = con.prepareStatement(sql);
 
-			ResultSet rs;
-			if ((rs = stmt.executeQuery()) != null) {
-				while (rs.next()) {
+			ResultSet rs = stmt.executeQuery();
 
-					Object b = p.newInstance();
+			while (rs.next()) {
 
-					String idname = pkFields.getName();
-					Field field = b.getClass().getDeclaredField(idname);
+				for (Field field : b.getClass().getDeclaredFields()) {
+
 					field.setAccessible(true);
-					field.setInt(b, id);
 
-					for (ColumnField f : columns) {
-						String name = f.getName();
+					if (field.getName() == pk.getName()) {
+						b.getClass().getDeclaredField(pk.getName()).setInt(b, id);
+					} else {
 
-						field = null;
+						for (ColumnField column : columns) {
 
-						String fieldType = f.getType().getSimpleName();
-						try {
-							field = b.getClass().getDeclaredField(name);
-							field.setAccessible(true);
-
-							switch (fieldType) {
-
-							case "int":
-								int jname = rs.getInt(f.getName());
-								field.set(b, jname);
-								break;
-							case "String":
-
-								String uname = rs.getString(f.getColumnName());
-
-								field.set(b, uname);
-								break;
+							if (field.getName().equals(column.getName())) {
+								field.set(b, rs.getString(column.getColumnName()));
 							}
 
-							o = b;
-//								case "oolean":
-//									
-//									break;
-//								case "double":
-//									
-//									break;
-//								case "byte":
-//									
-//									break;
-//								case "float":
-//									
-//									break;
-//								case "long":
-//									
-//									break;
-//								case "short":
-//									
-//									break;
-							//
-//								}
-
-						} catch (Exception e) {
-							e.printStackTrace();
 						}
 					}
 				}
 
 			}
-
+			return b;
 		} catch (IllegalArgumentException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -291,32 +240,28 @@ public class DaoImpl {
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		} catch (IllegalAccessException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (NoSuchFieldException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (SecurityException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
-		return o;
+		return null;
 
 	}
 
-	private Object createNewInstance(String clazzName) {
-		Class<?> beanClass = null;
-		Object beanInstance = null;
-		try {
-			beanClass = getClass().getClassLoader().loadClass(clazzName);
-			beanInstance = ConstructorUtils.invokeConstructor(beanClass, null);
-		} catch (Exception e) {
-			System.out.println("Error during creating class" + clazzName);
-		}
-		return beanInstance;
-	}
+	public <T> void deleteById(Class<?> clazz, int id) {
 
-	public <T> void deleteById(Object o, int id) {
-
-		Class<?> clazz = o.getClass();
 		MetaModel<Class<?>> mta = MetaModel.of(clazz);
 
 		try (Connection con = Configuration.getConnection()) {
 
 			String sql = "DELETE FROM " + mta.getTableName() + " WHERE " + mta.getPrimaryKey().getColumnName() + " = "
-					+ mta.getPrimaryKey();
+					+ id;
 
 			PreparedStatement stmt = con.prepareStatement(sql);
 			stmt.execute();
@@ -331,7 +276,7 @@ public class DaoImpl {
 		Calculator cal = new Calculator();
 
 		Reflections scan = new Reflections(packageName, new SubTypesScanner(false));
-		Set <Class<?>> clazzes = scan.getSubTypesOf(Object.class).stream().collect(Collectors.toSet());
+		Set<Class<?>> clazzes = scan.getSubTypesOf(Object.class).stream().collect(Collectors.toSet());
 		Configuration p = new Configuration();
 
 		try (Connection conn = Configuration.getConnection()) {
@@ -339,7 +284,7 @@ public class DaoImpl {
 			p.addAnnotatedClasses(clazzes);
 
 			for (com.room3.util.MetaModel<Class<?>> metamodel : p.getMetaModels()) {
-				
+
 				StringBuilder sb = new StringBuilder("CREATE TABLE IF NOT EXISTS " + metamodel.getTableName() + " (");
 
 				List<ColumnField> columns = metamodel.getColumns();
@@ -350,11 +295,11 @@ public class DaoImpl {
 
 					sb.append(", " + column.getColumnName() + " " + cal.getColType(column));
 				}
-				
-				sb.append(")");				
-			
+
+				sb.append(")");
+
 				PreparedStatement stmt = conn.prepareStatement(sb.toString());
-				
+
 				stmt.execute();
 			}
 		} catch (SQLException e) {
@@ -362,15 +307,17 @@ public class DaoImpl {
 		}
 	}
 
-	public List<Object> selectAllByValueInColumn(String value, String column, Class o) {
+	public List<Object> findByValue(String value, String column, Class<?> o) {
 
-		MetaModel<Class> mta = new MetaModel(o);
+		;
+
+		MetaModel<Class<?>> mta = MetaModel.of(o);
 		PrimaryKeyField pkField = mta.getPrimaryKey();
 		List<ColumnField> columns = mta.getColumns();
 		String idname = pkField.getName();
 		List<Object> stuff = new ArrayList<Object>();
 		try (Connection con = Configuration.getConnection()) {
-
+			Object b = Calculator.getNewInstance(o);
 			String sql = "SELECT * FROM " + o.getSimpleName().toLowerCase() + " WHERE " + column + " = " + "'" + value
 					+ "'";
 
@@ -379,7 +326,6 @@ public class DaoImpl {
 
 			while (rs.next()) {
 
-				Object b = createNewInstance(o.getName());
 				Field[] fields = b.getClass().getDeclaredFields();
 
 				for (Field field : fields) {
@@ -411,13 +357,16 @@ public class DaoImpl {
 		} catch (SQLException e) {
 			System.out.println("log this");
 			e.printStackTrace();
+		} catch (SecurityException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
 
 		return stuff;
 
 	}
 
-	public Object updateSingle(Object o) {
+	public Object save(Object o) {
 
 		MetaModel<?> mta = MetaModel.of(o.getClass());
 		PrimaryKeyField pkField = mta.getPrimaryKey();
@@ -461,7 +410,7 @@ public class DaoImpl {
 
 			while (rs.next()) {
 
-				Object b = createNewInstance(o.getClass().getName());
+				Object b = Calculator.getNewInstance(o.getClass());
 				Field[] fields = b.getClass().getDeclaredFields();
 
 				for (Field field : fields) {
@@ -494,6 +443,9 @@ public class DaoImpl {
 
 		} catch (SQLException e) {
 			e.printStackTrace();
+		} catch (SecurityException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
 
 		return o;

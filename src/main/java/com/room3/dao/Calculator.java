@@ -1,5 +1,7 @@
 package com.room3.dao;
 
+import java.lang.reflect.InvocationTargetException;
+
 import com.room3.annotations.Column;
 import com.room3.util.ColumnField;
 
@@ -16,6 +18,16 @@ public class Calculator {
 		}
 	
 		
+		return null;
+	}
+	public static Object getNewInstance(Class<?> o) {
+		try {
+			return o.getClass().getConstructor().newInstance();
+		} catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException
+				| NoSuchMethodException | SecurityException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		return null;
 	}
 }
